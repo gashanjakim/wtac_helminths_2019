@@ -1,21 +1,18 @@
-# Helminths 2019 - genetic Diverity module
+# Helminths 2019 - Genetic Diversity module
 
+## Working dir
 ```shell
-# Working dir
 cd /nfs/users/nfs_s/sd21/lustre118_link/WTAC/HELMINTHS_2019
 cd /nfs/users/nfs_s/sd21/lustre118_link/WTAC/HELMINTHS_2019/data/Module_GeneticDiversity
 ```
 
+## Get and prepare some raw data
+Extracting mtDNA reads already mapped to the HCON_V4 genome from my populaiton genetics analysis. 
 ``` shell
-# GET AND PREPARE RAW DATA
-
 # extact reads on mtDNA 
 #--- new bams: /nfs/users/nfs_s/sd21/lustre118_link/hc/GENOME/POPULATION_DIVERSITY/MAPPING/MERGED_BAMS
 #--- GS bams: /nfs/users/nfs_s/sd21/lustre118_link/hc/GENOME/POPULATION_DIVERSITY/GS_ORIGINAL/MAPPING
-```
 
-
-```
 for i in $( cd MERGED_BAMS ; ls -1 *.merged.bam) ; do \
 	samtools view -f3 -b MERGED_BAMS/${i} hcontortus_chr_mtDNA_arrow_pilon | \
     samtools sort -n -o ${i}.sorted - ; \
@@ -30,15 +27,14 @@ for i in $( cd MAPPING ; ls -1 *.merged.bam) ; do \
     rm ${i}.sorted; \
     done
 
-for i in *.gz; do  seqtk sample -s100  ${I} 5000 > ${I%%.fq.gz}.fastq; gzip ${I%%.fq.gz}.fastq; done &
+# found that downsampling to 5000 reads is sufficient for mapping and SNP calling, while at the same time minimising the file size footprint. Using seqtk to downsample
+
+for i in *.gz; do  seqtk sample -s100  ${I} 5000 > ${i%%.fq.gz}.fastq; gzip ${i%%.fq.gz}.fastq; done &
 ``` 
     
     
-
-
-
-
-## MAPPING
+## mapping to the mtDNA genome
+Will perfomr this in two parts for the module, first with a single sample, and second looping over all samples
 ``` shell
 cd /nfs/users/nfs_s/sd21/lustre118_link/WTAC/HELMINTHS_2019/data/Module_GeneticDiversity/MAPPING
 
@@ -49,7 +45,7 @@ cp ../../../../../hc/GENOME/REF/hcontortus_chr_mtDNA_arrow_pilon.fa .
 ln -s /nfs/users/nfs_s/sd21/lustre118_link/WTAC/HELMINTHS_2019/data/Module_GeneticDiversity/RAW_READS/CH_SWI_003_1.fq.gz
 ln -s /nfs/users/nfs_s/sd21/lustre118_link/WTAC/HELMINTHS_2019/data/Module_GeneticDiversity/RAW_READS/CH_SWI_003_2.fq.gz
 
-#--- subsample 10000 reads for comparison
+#--- subsample 10000 reads for comparison - testing this too see how it works
 
 seqtk sample -s100  CH_SWI_003_1.fq.gz 5000 > sub1.fq
 seqtk sample -s100  CH_SWI_003_2.fq.gz 1000 > sub2.fq
