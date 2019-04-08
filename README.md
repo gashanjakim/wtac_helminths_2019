@@ -1,5 +1,12 @@
 # Helminths 2019 - Genetic Diversity module
 
+## Software needed
+samtools-1.6
+bcftools-1.9
+bwa 0.7.17-r1188
+
+
+
 ## Working dir
 ```shell
 cd /nfs/users/nfs_s/sd21/lustre118_link/WTAC/HELMINTHS_2019
@@ -35,63 +42,83 @@ for i in *.gz; do  seqtk sample -s100  ${I} 5000 > ${i%%.fq.gz}.fastq; gzip ${i%
     
 ## mapping to the mtDNA genome
 Will perfomr this in two parts for the module, first with a single sample, and second looping over all samples
+
+
+## mapping - single sample
 ``` shell
 cd /nfs/users/nfs_s/sd21/lustre118_link/WTAC/HELMINTHS_2019/data/Module_GeneticDiversity/MAPPING
 
-# get reference
+#--- get reference - need to provide this
 cp ../../../../../hc/GENOME/REF/hcontortus_chr_mtDNA_arrow_pilon.fa .
 
-
-ln -s /nfs/users/nfs_s/sd21/lustre118_link/WTAC/HELMINTHS_2019/data/Module_GeneticDiversity/RAW_READS/CH_SWI_003_1.fq.gz
-ln -s /nfs/users/nfs_s/sd21/lustre118_link/WTAC/HELMINTHS_2019/data/Module_GeneticDiversity/RAW_READS/CH_SWI_003_2.fq.gz
-
-#--- subsample 10000 reads for comparison - testing this too see how it works
-
-seqtk sample -s100  CH_SWI_003_1.fq.gz 5000 > sub1.fq
-seqtk sample -s100  CH_SWI_003_2.fq.gz 1000 > sub2.fq
+#--- get reads
+ln -s ../RAW_READS/ZAI_ZAI_OA_014_1.fastq.gz
+ln -s ../RAW_READS/ZAI_ZAI_OA_014_2.fastq.gz
 
 
 #--- mapping 
 
 bwa index hcontortus_chr_mtDNA_arrow_pilon.fa
 
-bwa mem hcontortus_chr_mtDNA_arrow_pilon.fa CH_SWI_003_1.fq.gz CH_SWI_003_2.fq.gz > all.sam
-bwa mem hcontortus_chr_mtDNA_arrow_pilon.fa sub1.fq sub2.fq > sub.sam
+bwa mem hcontortus_chr_mtDNA_arrow_pilon.fa ZAI_ZAI_OA_014_1.fastq.gz ZAI_ZAI_OA_014_2.fastq.gz > ZAI_ZAI_OA_014.tmp.sam
 
+samtools view -q 15 -b -o ZAI_ZAI_OA_014.tmp.bam ZAI_ZAI_OA_014.tmp.sam
 
-samtools view -q 15 -b -o all.bam all.sam
-samtools view -q 15 -b -o sub.bam sub.sam
+samtools sort ZAI_ZAI_OA_014.tmp.bam -o ZAI_ZAI_OA_014.sorted.bam
 
+samtools index ZAI_ZAI_OA_014.sorted.bam 
 
-samtools sort –o all2.bam all.bam
-samtools sort –o sub2.bam sub.bam
-
-samtools index all2.bam
-samtools index sub2.bam
 #--- this can be viewed in artemis
 ```
 
 
-
-
-
-
-
-## SNP calling
+## SNP calling - single sample
 ```
-bcftools-1.9 mpileup -Ou -f hcontortus_chr_mtDNA_arrow_pilon.fa all2.bam | bcftools-1.9 call -v -c --ploidy 1 -Ob --skip-variants indels > all.bcf
+bcftools-1.9 mpileup -Ou -f hcontortus_chr_mtDNA_arrow_pilon.fa ZAI_ZAI_OA_014.sorted.bam  | bcftools-1.9 call -v -c --ploidy 1 -Ob --skip-variants indels > ZAI_ZAI_OA_014.bcf
 
-bcftools index all.bcf
+bcftools index ZAI_ZAI_OA_014.bcf
 
 
-bcftools-1.9 view all.bcf -Oz > all.vcf.gz
-tabix -p vcf all.vcf.gz
+bcftools-1.9 view ZAI_ZAI_OA_014.bcf -Oz > ZAI_ZAI_OA_014.vcf.gz
+tabix -p vcf ZAI_ZAI_OA_014.vcf.gz
 #--- this can be viewed in artemis
 ```
 
 
+## Mapping - multiple samples
+``` 
+
+for i in $( cd ../RAW_READS ; ls -1 *_1.fastq.gz | sed 's/_1.fastq.gz//g'); do
+# map reads
+bwa mem hcontortus_chr_mtDNA_arrow_pilon.fa ../RAW_READS/${i}_1.fastq.gz ../RAW_READS/${i}_2.fastq.gz > ${i}.tmp.sam ;
+# convert sam to bam
+samtools view -q 15 -b -o ${i}.tmp.bam ${i}.tmp.sam ;
+#sort reads
+samtools sort ${i}.tmp.bam -o ${i}.sorted.bam ; 
+# index the bam
+samtools index ${i}.sorted.bam ;
+# remove files you dont need
+rm *tmp*;
+done
 
 
+## SNP calling - multiple samples
+```
+# make a list of bam files that you want to include in the analysis
+ls -1 *.sorted.bam > bam.list
+# call SNPs from the sampels listed in the bam list, to generate a multi-sample bcf
+bcftools-1.9 mpileup -Ou --annotate FORMAT/DP -f hcontortus_chr_mtDNA_arrow_pilon.fa --bam-list bam.list | bcftools-1.9 call -v -c --ploidy 1 -Ob --skip-variants indels  > all_samples.bcf
+# index the multi-sample bcf
+bcftools index all_samples.bcf
+# convert the bcf to a vcf
+bcftools-1.9 view all_samples.bcf -Oz > all_samples.vcf.gz
+# index the vcf
+tabix -p vcf all_samples.vcf.gz
+
+```
+
+
+vcftools-0.1.14 --gzvcf all_samples.vcf.gz --maf 0.05
 
 
 ## Analysis
