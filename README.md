@@ -188,6 +188,7 @@ library(ggmap)
 library(maps)
 library(mapdata)
 library(plotrix)
+library(mapplots)
 
 #-- population genetics
 library(adegenet)
@@ -312,9 +313,6 @@ Fig - PCA plots
 tree_data <- aboot(vcf.gl, tree = "upgma", distance = bitwise.dist, sample = 100, showtree = F, cutoff = 50, quiet = T)
 
 #--- plot the tree
-#plot.phylo(tree_data, cex = 0.4, font = 2, adj = 0, tip.color =  cols[pop(vcf.gl)])
-#nodelabels(tree_data$node.label, adj = c(1.3, -0.5), frame = "n", cex = 0.4,font = 3, xpd = TRUE)
-
 ggtree(tree_data) +
 	geom_tiplab(size = 2, color = cols[pop(vcf.gl)]) +
 	xlim(-0.1, 0.3) +
@@ -332,8 +330,13 @@ scp sd21@pcs5.internal.sanger.ac.uk:/nfs/users/nfs_s/sd21/lustre118_link/WTAC/HE
 Fig - Tree of genetic distance
 
 
+## Quantitative analysis of genetic differentiation
+In this section we will calculate the variant allele frequency per population (we will   
+use these later when we make a map), and calculate pairwise genetic differentiaiton   
+between populations.  
 
 
+```R
 #--- quantitative differentiation
 #--- allele frequencies
 myDiff_pops  <-  genetic_diff(vcf,pops = vcf.gl@pop)
@@ -356,17 +359,32 @@ myDiff_pairwise  <-  pairwise_genetic_diff(vcf,pops = vcf.gl@pop)
 colMeans(myDiff[,c(4:ncol(myDiff))], na.rm = TRUE)
 as.matrix(colMeans(myDiff[,c(4:ncol(myDiff))], na.rm = TRUE))
 
+```
 
-# make a map of the sampling locations, and plot some data on it
+# Visualising genetic data on a map of sampling locations
+Here, we will make a map of the sampling locations, and plot the allele frequency  
+data on it. This or similar may be used to explore how populations may be connected  
+to each other. We will explore this by plotting SNPs that seem to have the most effect  
+in driving the variance in the PCA plot.
+
+Note that we will only be looking at one variant at a time, and the genetic signal  
+that differentiate these populations is made up of many variants. However, it  
+should give you an idea of what could be done integrating these data types.
 
 
-#mapWorld <- borders("world", colour="gray85", fill="gray85")
-#ggplot() + mapWorld + geom_point(aes(metadata$longitude, metadata$latitude,col=metadata$country))+scale_colour_manual(values=cols)+theme_bw()+labs(x="Longitude",y="Latitude")
-
+```R
 # select a SNP of interest based on its position
-AF_SNP_coords  <-  AF_data_coords[AF_data_coords$POS == "10076",]
+AF_SNP_coords  <-  AF_data_coords[AF_data_coords$POS == "33",]
 AF_SNP_coords  <-  AF_data_coords[1175,]
 
+# make the map
+#-- this script does a couple of things.
+#---- 1. makes a map, with axes
+#---- 2. plots the sampling location
+#---- 3. adds a pie chart for each sampling location, describing the major and minor allele frequency
+#---- 4. adds a legend of the sampling location
+
+png("map_plot.png")
 par(fg = "black")
 map("world", col = "grey85", fill = TRUE, border = FALSE)
 map.axes()
@@ -374,5 +392,13 @@ points(metadata$longitude, metadata$latitude, cex = 1, pch = 20, col = cols[pop(
 for (i in 1:nrow(AF_SNP_coords)){
    add.pie(z = c(AF_SNP_coords$value[i], 1-AF_SNP_coords$value[i]), x = AF_SNP_coords$longitude[i]+10, y = AF_SNP_coords$latitude[i], radius = 5, col = c(alpha("orange", 0.5), alpha("blue", 0.5)), labels = "")
 }
-legend( x = "left", legend = AF_SNP_coords$country, col = cols[as.factor(AF_SNP_coords$country)], lwd = "1", lty = 0, pch = 20, box.lwd = 0, cex = 0.9)
+legend( x = "left", legend = AF_SNP_coords$country, col = cols[as.factor(AF_SNP_coords$country)], lwd = "1", lty = 0, pch = 20, box.lwd = 0, cex = 0.7)
+dev.off()
+
 ```
+
+```shell
+scp sd21@pcs5.internal.sanger.ac.uk:/nfs/users/nfs_s/sd21/lustre118_link/WTAC/HELMINTHS_2019/data/Module_GeneticDiversity/MAPPING/map_plot*  ~/Documents/workbook/wtac_helminths_2019/04_analysis
+```
+![Map](04_analysis/map_plot.png)
+Fig - Map of sampling locations with allele frequency pie charts included
