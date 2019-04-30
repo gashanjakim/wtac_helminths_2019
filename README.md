@@ -384,7 +384,7 @@ AF_SNP_coords  <-  AF_data_coords[1175,]
 #---- 3. adds a pie chart for each sampling location, describing the major and minor allele frequency
 #---- 4. adds a legend of the sampling location
 
-png("map_plot.png",res=250)
+png("map_plot.png",width=2, height = 1, units = "in")
 par(fg = "black")
 map("world", col = "grey85", fill = TRUE, border = FALSE)
 map.axes()
