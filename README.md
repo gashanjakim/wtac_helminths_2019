@@ -384,7 +384,7 @@ AF_SNP_coords  <-  AF_data_coords[1175,]
 #---- 3. adds a pie chart for each sampling location, describing the major and minor allele frequency
 #---- 4. adds a legend of the sampling location
 
-png("map_plot.png")
+png("map_plot.png",res=200)
 par(fg = "black")
 map("world", col = "grey85", fill = TRUE, border = FALSE)
 map.axes()
@@ -392,7 +392,7 @@ points(metadata$longitude, metadata$latitude, cex = 1, pch = 20, col = cols[pop(
 for (i in 1:nrow(AF_SNP_coords)){
    add.pie(z = c(AF_SNP_coords$value[i], 1-AF_SNP_coords$value[i]), x = AF_SNP_coords$longitude[i]+10, y = AF_SNP_coords$latitude[i], radius = 5, col = c(alpha("orange", 0.5), alpha("blue", 0.5)), labels = "")
 }
-legend( x = "left", legend = AF_SNP_coords$country, col = cols[as.factor(AF_SNP_coords$country)], lwd = "1", lty = 0, pch = 20, box.lwd = 0, cex = 0.7)
+legend( x = "left", legend = AF_SNP_coords$country, col = cols[as.factor(AF_SNP_coords$country)], lwd = "1", lty = 0, pch = 20, box.lwd = 0, cex = 0.6)
 dev.off()
 
 ```
