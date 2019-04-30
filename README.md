@@ -340,7 +340,7 @@ between populations.
 #--- quantitative differentiation
 #--- allele frequencies
 myDiff_pops  <-  genetic_diff(vcf,pops = vcf.gl@pop)
-AF_data  <-  myDiff_pops[,c(1:20)]
+AF_data  <-  myDiff_pops[,c(1:19)]
 AF_data  <-  melt(AF_data)
 colnames(AF_data)  <-  c("CHROM","POS","country","value")
 AF_data$country  <-  gsub("Hs_","",AF_data$country)
@@ -384,8 +384,8 @@ AF_SNP_coords  <-  AF_data_coords[1175,]
 #---- 3. adds a pie chart for each sampling location, describing the major and minor allele frequency
 #---- 4. adds a legend of the sampling location
 
-png("map_plot.png",res=200)
-par(fg = "black")
+png("map_plot.png",res=250)
+par(fg = "black")ß
 map("world", col = "grey85", fill = TRUE, border = FALSE)
 map.axes()
 points(metadata$longitude, metadata$latitude, cex = 1, pch = 20, col = cols[pop(vcf.gl)])
