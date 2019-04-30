@@ -385,7 +385,7 @@ AF_SNP_coords  <-  AF_data_coords[1175,]
 #---- 4. adds a legend of the sampling location
 
 png("map_plot.png",res=250)
-par(fg = "black")ß
+par(fg = "black")
 map("world", col = "grey85", fill = TRUE, border = FALSE)
 map.axes()
 points(metadata$longitude, metadata$latitude, cex = 1, pch = 20, col = cols[pop(vcf.gl)])
