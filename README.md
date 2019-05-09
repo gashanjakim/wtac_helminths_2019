@@ -383,8 +383,7 @@ AF_SNP_coords  <-  AF_data_coords[1175,]
 #---- 2. plots the sampling location
 #---- 3. adds a pie chart for each sampling location, describing the major and minor allele frequency
 #---- 4. adds a legend of the sampling location
-
-png("map_plot.png",width=2, height = 1, units = "in")
+png("map_plot.png",width = 700, height = 400, units = "px")
 par(fg = "black")
 map("world", col = "grey85", fill = TRUE, border = FALSE)
 map.axes()
@@ -400,5 +399,7 @@ dev.off()
 ```shell
 scp sd21@pcs5.internal.sanger.ac.uk:/nfs/users/nfs_s/sd21/lustre118_link/WTAC/HELMINTHS_2019/data/Module_GeneticDiversity/MAPPING/map_plot*  ~/Documents/workbook/wtac_helminths_2019/04_analysis
 ```
+
+![Map2](04_analysis/map_plot.png)
 ![Map](04_analysis/map_plot.png)
-Fig - Map of sampling locations with allele frequency pie charts included
+Fig - Map of sampling locations with allele frequency pie charts included  
