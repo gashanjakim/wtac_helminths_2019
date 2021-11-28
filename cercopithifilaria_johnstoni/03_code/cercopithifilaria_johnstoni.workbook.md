@@ -1,22 +1,64 @@
 # Workspace for the Cercopithifilaria johnstoni genome project
 
+Copyright (c) 2021, Stephen R Doyle  
+All rights reserved.
+
+This source code is licensed under the BSD-style license found in the
+LICENSE file in the root directory of this source tree.
+
+
 ## Authors:
-Kirsty McCann and Stephen Doyle
+- Kirsty McCann (La Trobe University)
+- Stephen Doyle (Wellcome Sanger Institute, ex LTU)
 
 
-# Genome Scope
+## Sequencing and raw reads
+### Sequencing
+- sequencing was performed by Steve at LTU on an Illumina MiSeq using a V3 600 cycle (2x300 bp) sequencing kit
+
+
+### Raw reads
+- raw reads were checked using FastQC before analysis
+- this was done at LTU years back (2015?), and I don't have the analysis anymore, but would be easy to regenerate
+- it was clear from this data the drop in sequencing quality beyond 150-200 bp of the long MiSeq reads. While this is acceptable for some applications, it turned out not to be for assembly from the initial assemblies produced. Hence, the reads were trimmed quite hard as described below.
+
+
+### Trimming
+- reads were trimmed using Trimmomatic
+- found that assemblies with full length reads were suboptimal to trimmed reads, trimmed not only for quality by also for length. Given the high coverage, hard trimmed back to 150 bp together with quality trimming was a good compromise and worked well.
+
 ```bash
-# trim the reads first - the full length reads are quite error prone
-
 module load trimmomatic/0.39--1
 
 run_trimmomatic CJ Cj3-500-700_S1_L001_R1_001.fastq.gz Cj3-500-700_S1_L001_R2_001.fastq.gz
 
-# trimmomatic settings: ILLUMINACLIP:/nfs/users/nfs_s/sd21/databases/trimmomatic_Illumina-adapters.fa:2:30:10 CROP:150 SLIDINGWINDOW:10:20 MINLEN:100
+```
+- where "run_trimmomatic" is:
 
-# un gizip the raw data
-for i in *gz; do
-zcat ${i} > ${i%.gz}; done
+```bash
+# run_trimmomatic
+out_prefix=$1
+read_1=$2
+read_2=$3
+
+
+java -jar /software/pathogen/external/apps/usr/local/Trimmomatic-0.32/trimmomatic-0.32.jar PE \
+-threads 4 \
+-phred33 \
+${read_1} ${read_2} \
+${out_prefix}.paired_R1.fastq.gz ${out_prefix}.unpaired_R1.fastq.gz \
+${out_prefix}.paired_R2.fastq.gz ${out_prefix}.unpaired_R2.fastq.gz \
+ILLUMINACLIP:/nfs/users/nfs_s/sd21/databases/trimmomatic_Illumina-adapters.fa:2:30:10 \
+CROP:150 SLIDINGWINDOW:10:20 MINLEN:100
+
+```
+
+### Genome Scope
+- Genome Scope was used to estimate the genome size from the raw reads
+
+```bash
+# un gzip the raw data
+gunzip *.gz
 
 # run jellyfish
 jellyfish count -C -m 21 -s 1000000000 -t 10 *.fastq -o reads.jf
@@ -26,12 +68,35 @@ jellyfish histo -t 10 reads.jf > reads.histo
 # use the "reads.histo" as input to genomescope
 
 # output of run: http://genomescope.org/analysis.php?code=8JHWvmV1sukF1nGshxjY
-
+# rerun in genomescope2: http://genomescope.org/genomescope2.0/analysis.php?code=wN4P2Ru51VfnpIQwHcz6
 
 ```
 
-# genome improvement
+- Genomescope2 output
 
+| property | min | max |
+| --- | --- | --- |
+| Homozygous | 98.9614% | 98.9724% |
+| Heterozygous | 1.02756% | 1.03864% |
+| Genome Haploid Length | 63,161,930 bp | 63,240,284 bp |
+| Genome Repeat Length | 3,104,451 bp | 3,108,302 bp |
+| Genome Unique Length | 60,057,479 bp | 60,131,982 bp |     
+| Model Fit | 96.8819% | 99.1873% |
+| Read Error Rate | 0.209979% | 0.209979% |
+
+
+
+
+
+
+## Genome assembly
+- assembly was performed by Kirsty at La Trobe using Spades with default parameters
+
+
+
+
+## genome improvement
+- Genome improvement performed by Steve at Sanger
 - output of spades (as presented in Kirsty's thesis)
 /nfs/users/nfs_s/sd21/lustre118_link/cercopithifilaria_johnstoni/scaffolds.fasta
 
@@ -42,21 +107,20 @@ jellyfish histo -t 10 reads.jf > reads.histo
      - redundans (with reads) - scaffold and gapfill
 
 
+### Redundans
+- using redundans first to identifiy and remove excess haplotypic sequneces
 
-## redundans
-```
+```bash
+# run redundans
 /nfs/users/nfs_s/sd21/lustre118_link/software/GENOME_IMPROVEMENT/redundans/redundans.py --fasta scaffolds.fasta --outdir REDUNDANS_OUT
 
 ```
 
-## blobtools
+### Blobtools
+- using blobtools to identify and filter potnetial contaminants in the assembly
 ```bash
-
 # get taxdump
 curl -L ftp://ftp.ncbi.nih.gov/pub/taxonomy/new_taxdump/new_taxdump.tar.gz | tar xzf -
-
-
-# blast genome
 
 #--- fix reference, and split it into 100 reads per file - this will help speed up the blast
 fastaq to_fasta -l0 scaffolds.reduced.fa scaffolds.reduced.l0.fa
@@ -65,15 +129,15 @@ split --lines=200 scaffolds.reduced.l0.fa
 
 #--- run blast, with a separate blast job per 100 reads
 for i in x*; do \
-bsub.py 10 --queue long --threads 16 blast /lustre/scratch118/infgen/team133/ea10/miniconda/bin/blastn \
--db /data/blastdb/Supported/NT/nt \
--query ${i} \
--outfmt \"6 qseqid staxids bitscore std\" \
--max_target_seqs 10 \
--max_hsps 1 \
--evalue 1e-25 \
--num_threads 16 \
--out ${i}_blast.out;
+     bsub.py 10 --queue long --threads 16 blast /lustre/scratch118/infgen/team133/ea10/miniconda/bin/blastn \
+     -db /data/blastdb/Supported/NT/nt \
+     -query ${i} \
+     -outfmt \"6 qseqid staxids bitscore std\" \
+     -max_target_seqs 10 \
+     -max_hsps 1 \
+     -evalue 1e-25 \
+     -num_threads 16 \
+     -out ${i}_blast.out;
 done
 
 cat *blast.out > blast.out
@@ -84,7 +148,6 @@ rm x*
 #--- use minimap to map reads to generate a bam for blobtools coverage stats
 
 minimap2 -ax sr -t 16 scaffolds.reduced.fa Cj3-500-700_S1_L001_R1_001.fastq.gz Cj3-500-700_S1_L001_R2_001.fastq.gz | samtools sort -@16 -O BAM -o cj_mapped.bam -
-
 
 
 # run blobtools
@@ -107,13 +170,16 @@ cat blobtools_filter_byhit.list blobtools_filter_bycov_gt10.list | sort | uniq -
 
 
 # remake fasta using filtered list of sequences
-while read i; do samtools faidx scaffolds.reduced.fa ${i} >> scaffolds.reduced.bt_filter.fa; done < blobtools_filter_bycov_gt10_byhit.list
+while read i; do
+     samtools faidx scaffolds.reduced.fa ${i} >> scaffolds.reduced.bt_filter.fa;
+done < blobtools_filter_bycov_gt10_byhit.list
 
 ```
 
 
 
-## rescaffold with opera
+### Rescaffold with opera
+- this attempts to identify unique joins in the assembly now some of the haplotypes have been removed
 ```bash
 # run bowtie to generate a mapping file
 bowtie2-build scaffolds.reduced.bt_filter.fa contigs
@@ -126,18 +192,113 @@ bowtie2 -k 5 -x contigs -X 1000 --rf -p 32 -1 Cj3-500-700_S1_L001_R1_001.fastq.g
 
 
 
-## rescaffold the opera output
+### Rescaffold and gapfill the opera output using Redundans again
+- the second round of redundans aims to use the short reads again to fill gaps in the assembly
 ```
 # run redundans, this time with reads, to scaffold and gapfill
 /nfs/users/nfs_s/sd21/lustre118_link/software/GENOME_IMPROVEMENT/redundans/redundans.py -f scaffoldSeq.fasta -i ../Cj3-500-700_S1_L001_R1_001.fastq.gz ../Cj3-500-700_S1_L001_R2_001.fastq.gz -o rescaffold -t 16
 
+```
 
+
+## Genome annotation
+### Preparation of hints for running BRAKER
+- preparation of hints for braker using PROTHINT (https://github.com/gatech-genemark/ProtHint)
+
+```bash
+/nfs/users/nfs_s/sd21/lustre118_link/software/TRANSCRIPTOME/ProtHint/bin/prothint.py --threads 20 ../cjohnstoni_genome_200917.fasta /nfs/users/nfs_s/sd21/lustre118_link/software/TRANSCRIPTOME/ProtHint/databases/odb10_metazoa/odb10_metazoa_proteins.fa
+```
+
+
+### Running BRAKER
+- annotation using braker
+```bash
+export AUGUSTUS_CONFIG_PATH=/nfs/users/nfs_s/sd21/software/augustus-3.2.1/config
+export AUGUSTUS_SCRIPTS_PATH=/nfs/users/nfs_s/sd21/software/augustus-3.2.1/scripts
+export BAMTOOLS_PATH=/nfs/users/nfs_s/sd21/lustre118_link/software/bamtools/bin
+export GENEMARK_PATH=/nfs/users/nfs_s/sd21/lustre118_link/software/TRANSCRIPTOME/ProtHint/dependencies/GeneMarkES
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/software/gcc-4.9.2/lib64/libstdc++.so.6
+export BAMTOOLS_PATH=/nfs/users/nfs_s/sd21/lustre118_link/software/bamtools/bin
+
+# had to remove pipes in fasta headers to get braker to run
+sed -i 's/|/_/g' cjohnstoni_genome_200917.fa
+sed -i 's/|/_/g' prothint_augustus.gff3
+
+bsub.py --queue long --threads 20 20 braker2 "/lustre/scratch118/infgen/team133/sd21/software/TRANSCRIPTOME/BRAKER_v2.0/braker.pl --genome=cjohnstoni_genome_200917.fa --hints=prothint_augustus.gff3 --gff3 --cores 20 --extrinsicCfgFile=extrinsic.M.RM.E.W.P.C.cfg"
+
+
+# annotation stats
+gag.py -f ../../cjohnstoni_genome_200917.fa -g augustus.gff3
+
+```
+
+### Updating gene IDs in the annotation
+- Braker / Augustus generates a very generic set of gene IDs, which wont be unique relative to other assemblies using the same approach
+- used the pipeline below to add "CJOH_" followed using a unique 8 digit identifier that increments by a value of 10 per annotation. This provides plenty fo naming space to modify and add models in the future if/when needed
+- note that the genome models of the mtDNA genome was manually annotated.
+
+```bash
+#working dir = /nfs/users/nfs_s/sd21/lustre118_link/cercopithifilaria_johnstoni/FINAL_GENOME
+
+gff=cjohnstoni_annotation.210825.gff3
+species_prefix=CJOH_
+
+# copy gff to a tmp file - just to avoid doing something silly like overwriting original
+cat ${gff} | grep -v "#" > ${gff}.tmp
+
+# STEP 1 - generate using IDs for each gene
+# - extract gene name from lines in gff matching gene|GENE
+# - remove surrounding characters
+# - sort by gene ID and remove duplicates
+# - print new gene id (species prefix with 8 digit ID that increases by 10 for each gene), and old gene id
+
+awk -F'[\t;]' '{if($3=="gene" || $3=="GENE") print $9}' ${gff}.tmp | sed -e 's/ID=//g' -e 's/\;//g' | sort -V | uniq | awk -v species_prefix="$species_prefix" '{fmt=species_prefix"%08d\t%s\n"; printf fmt,NR*10,$0}' > genes_renames.list
+
+
+# pasa dependent fix
+cat genes_renames.list | sed 's/gene/mRNA/g' >  mRNA_renames.list
+
+# STEP 2 - replace gene IDs
+# - read new / old gene IDs from above
+# - replace IDs, recognising differences in placement of gene, mRNA, and progeny
+# NOTE: match - equal sign at beginning, followed by one of [.;$] where $ is the end of the line, which is what AUGUSTSUS / BRAKER produce - this might have to be tweaked for other outputs
+# NOTE: eg.  =XXX[. ;]
+
+while read new_gene old_gene; do
+     grep "ID=$old_gene[.;$]" ${gff}.tmp | sed -e "s/=${old_gene}[.]/=${new_gene}\./g" -e "s/=${old_gene}[;]/=${new_gene}\;/g" -e "s/=${old_gene}$/=${new_gene}/g" -e "s/Name=.*$/Name=${new_gene}/g";
+done < genes_renames.list > ${gff%.gff*}.genesrenamed.tmp
+
+
+
+# fix end of line characters
+sed -i 's/;$//g' ${gff%.gff*}.genesrenamed.tmp
+
+
+
+echo "##gff-version 3" > ${species_prefix}.renamed.gff3; cat ${gff%.gff*}.genesrenamed.tmp | sort -k1,1 -k4,4n >> ${species_prefix}.renamed.gff3
+
+# add mtDNA annotation to the end
+cat ${species_prefix}.renamed.gff3 C_johnstoni_mt_annotation.SD210906.gff.tmp > tmp; mv tmp ${species_prefix}.renamed.gff3
+
+# final fix, merging nuclear and mtDNA genomes
+mv CJOH_.renamed.gff3 cercopithifilaria_johnstoni_annotation_SD210906.gff3
+
+cat cjohnstoni_genome_210825.fa C_johnstoni_mt_draft_genome.fasta > cercopithifilaria_johnstoni_genome_SD210906.fasta
+
+# clean up ready for submission to ENA / WBP
+gt gff3 -sort -tidy -retainids cercopithifilaria_johnstoni_annotation_SD210906.gff3 > tmp; mv tmp cercopithifilaria_johnstoni_annotation_SD210906.gff3
+
+grep -v "###" cercopithifilaria_johnstoni_annotation_SD210906.gff3 > tmp ; mv tmp cercopithifilaria_johnstoni_annotation_SD210906.gff3
 ```
 
 
 
 
-## check genome completeness using BUSCO and CEGMA
+
+
+## Assessing genome completeness using BUSCO
+
+### Running BUSCO to examine iteratative analysis of genome improvements
 ```bash
 cd /nfs/users/nfs_s/sd21/lustre118_link/cercopithifilaria_johnstoni/BUSCO
 
@@ -151,56 +312,380 @@ bsub.py --queue long --threads 30 20 busco11 ~sd21/bash_scripts/run_busco_nemato
 
 
 
-## AUGUSTUS
+### Running BUSCO for genome assemblies of Cj and other filarial nematodes
 ```bash
-/software/pathogen/external/apps/usr/bin/splitMfasta.pl HAEM_V3.3.chr.fa --outputpath=./
-for f in *.split.*; do NAME=`grep ">" $f`; mv $f ${NAME#>}.fa; done
+
+# load req augustus components for BUSCO
+export AUGUSTUS_CONFIG_PATH=/nfs/users/nfs_s/sd21/software/augustus-3.2.1/config
+export PATH=$PATH:/nfs/users/nfs_s/sd21/software/augustus-3.2.1/bin/
+
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/acanthocheilonema_viteae/PRJEB1697/acanthocheilonema_viteae.PRJEB1697.WBPS16.genomic.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/brugia_malayi/PRJNA10729/brugia_malayi.PRJNA10729.WBPS16.genomic.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/brugia_pahangi/PRJEB497/brugia_pahangi.PRJEB497.WBPS16.genomic.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/brugia_timori/PRJEB4663/brugia_timori.PRJEB4663.WBPS16.genomic.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/dirofilaria_immitis/PRJEB1797/dirofilaria_immitis.PRJEB1797.WBPS16.genomic.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/loa_loa/PRJNA246086/loa_loa.PRJNA246086.WBPS16.genomic.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/litomosoides_sigmodontis/PRJEB3075/litomosoides_sigmodontis.PRJEB3075.WBPS16.genomic.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/onchocerca_volvulus/PRJEB513/onchocerca_volvulus.PRJEB513.WBPS16.genomic.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/onchocerca_ochengi/PRJEB1204/onchocerca_ochengi.PRJEB1204.WBPS16.genomic.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/onchocerca_flexuosa/PRJEB512/onchocerca_flexuosa.PRJEB512.WBPS16.genomic.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/wuchereria_bancrofti/PRJEB536/wuchereria_bancrofti.PRJEB536.WBPS16.genomic.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/wuchereria_bancrofti/PRJEB536/wuchereria_bancrofti.PRJEB536.WBPS16.genomic.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/wuchereria_bancrofti/PRJNA275548/wuchereria_bancrofti.PRJNA275548.WBPS16.genomic.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/elaeophora_elaphi/PRJEB502/elaeophora_elaphi.PRJEB502.WBPS16.genomic.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/loa_loa/PRJNA37757/loa_loa.PRJNA37757.WBPS16.genomic.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/onchocerca_flexuosa/PRJNA230512/onchocerca_flexuosa.PRJNA230512.WBPS16.genomic.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/onchocerca_ochengi/PRJEB1465/onchocerca_ochengi.PRJEB1465.WBPS16.genomic.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/setaria_digitata/PRJNA479729/setaria_digitata.PRJNA479729.WBPS16.genomic.fa.gz
+
+gunzip *.gz
+
+# run BUSCO, looping over genome fasta files
+for i in *.fa; do
+     bsub.py --queue long 10 ${i%.WBPS16.genomic.fa}_busco_genome "/nfs/users/nfs_s/sd21/lustre118_link/software/ASSEMBLY_QC/busco_v3/scripts/run_BUSCO.py --in ${i} --out ${i%.WBPS16.genomic.fa}_genome_nematoda --mode genome --lineage_path /nfs/users/nfs_s/sd21/lustre118_link/databases/busco/nematoda_odb9/ --species caenorhabditis --tarzip --force --long --blast_single_core --tmp_path .tmp  --restart";
+     done
+```
 
 
-/software/pathogen/external/apps/usr/bin/summarizeACGTcontent.pl HAEM_V3.3.chr.fa > basesummary.out
 
 
 
+### Analysis of proteins predicted in the genome vs related species
+```bash
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/onchocerca_volvulus/PRJEB513/onchocerca_volvulus.PRJEB513.WBPS16.protein.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/acanthocheilonema_viteae/PRJEB1697/acanthocheilonema_viteae.PRJEB1697.WBPS16.protein.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/brugia_malayi/PRJNA10729/brugia_malayi.PRJNA10729.WBPS16.protein.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/brugia_pahangi/PRJEB497/brugia_pahangi.PRJEB497.WBPS16.protein.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/brugia_timori/PRJEB4663/brugia_timori.PRJEB4663.WBPS16.protein.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/dirofilaria_immitis/PRJEB1797/dirofilaria_immitis.PRJEB1797.WBPS16.protein.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/loa_loa/PRJNA246086/loa_loa.PRJNA246086.WBPS16.protein.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/litomosoides_sigmodontis/PRJEB3075/litomosoides_sigmodontis.PRJEB3075.WBPS16.protein.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/onchocerca_ochengi/PRJEB1204/onchocerca_ochengi.PRJEB1204.WBPS16.protein.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/onchocerca_flexuosa/PRJNA230512/onchocerca_flexuosa.PRJNA230512.WBPS16.protein.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/wuchereria_bancrofti/PRJEB536/wuchereria_bancrofti.PRJEB536.WBPS16.protein.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/wuchereria_bancrofti/PRJNA275548/wuchereria_bancrofti.PRJNA275548.WBPS16.protein.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/elaeophora_elaphi/PRJEB502/elaeophora_elaphi.PRJEB502.WBPS16.protein.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/wuchereria_bancrofti/PRJNA275548/wuchereria_bancrofti.PRJNA275548.WBPS16.protein.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/setaria_digitata/PRJNA479729/setaria_digitata.PRJNA479729.WBPS16.protein.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/onchocerca_ochengi/PRJEB1465/onchocerca_ochengi.PRJEB1465.WBPS16.protein.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/onchocerca_flexuosa/PRJNA230512/onchocerca_flexuosa.PRJNA230512.WBPS16.protein.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS16/species/loa_loa/PRJNA37757/loa_loa.PRJNA37757.WBPS16.protein.fa.gz
 
---species=/nfs/users/nfs_s/sd21/software/augustus-3.2.1/config/species/BUSCO_OPERA_RESCAFFOLD_busco3.02.nematoda_3730906830
-
-grep "bases" basesummary.out | awk -v PWD=$PWD -v HINTS=merged_hints.gff '{print PWD"/"$3".fa",PWD"/"HINTS,"1",$1}' OFS="\t" > sequences.list
-
-/software/pathogen/external/apps/usr/bin/createAugustusJoblist.pl --sequences=sequences.list --wrap="#" --overlap=50000 --chunksize=3000000 --outputdir=augustus_split_out --joblist=jobs.lst --jobprefix=augsplit --command \
-"/nfs/users/nfs_s/sd21/lustre118_link/software/TRANSCRIPTOME/augustus_v3.3/bin/augustus --species=HAEM_V3.3.chr2 --strand=both --genemodel=partial --protein=on --introns=on --start=on --stop=on --cds=on --codingseq=on --UTR=off --nc=off --gff3=on --alternatives-from-evidence=on --extrinsicCfgFile=/nfs/users/nfs_s/sd21/lustre118_link/software/TRANSCRIPTOME/augustus_v3.3/config/species/HAEM_V3.3.chr2/extrinsic.HAEM_V3.3.chr2.cfg --AUGUSTUS_CONFIG_PATH=/nfs/users/nfs_s/sd21/lustre118_link/software/TRANSCRIPTOME/augustus_v3.3/config/"
+gunzip *.gz
 
 
-
-mkdir augustus_split_out
-
-
-for i in augsplit*; do echo -e "bsub.py 4 augsplit_log ./${i}" >> run_augsplit; done        #Max memory used was 1.2Gb
-chmod a+x run_augsplit
-bsub.py --queue yesterday 1 run_splitter ./run_augsplit
-
-
-
-cat augustus_split_out/*gff | /software/pathogen/external/apps/usr/bin/join_aug_pred.pl > augustus_merge.final.gff
-grep "AUGUSTUS" augustus_merge.final.gff > augustus_merge.final_2.gff
-
-
-#update to augustus
-/nfs/users/nfs_s/sd21/lustre118_link/software/TRANSCRIPTOME/augustus_v3.3/bin/augustus
---AUGUSTUS_CONFIG_PATH=/nfs/users/nfs_s/sd21/lustre118_link/software/TRANSCRIPTOME/augustus_v3.3/config
---extrinsicCfgFile=/nfs/users/nfs_s/sd21/lustre118_link/software/TRANSCRIPTOME/augustus_v3.3/config/species/HAEM_V3.3.chr2/extrinsic.HAEM_V3.3.chr2.cfg
+# run BUSCO, looping over protein fasta files
+for i in *WBPS16.protein.fa; do   
+     bsub.py 10 ${i%.WBPS16.protein.fa}_busco_proteins "/nfs/users/nfs_s/sd21/lustre118_link/software/ASSEMBLY_QC/busco_v3/scripts/run_BUSCO.py --in ${i} --out ${i%.WBPS16.protein.fa}_proteins_nematoda --mode proteins --lineage_path /nfs/users/nfs_s/sd21/lustre118_link/databases/busco/nematoda_odb9/ --species caenorhabditis --tarzip --force --long --blast_single_core --tmp_path .tmp --force";
+done
 
 ```
 
 
-#--------------------------------------------------------------------------------------------------------------
 
-# Repeat model and mask of filarial genomes
+## Assembly statistics for filarial nematodes + C. johnstoni
+```bash
 
-```shell
+cd /nfs/users/nfs_s/sd21/lustre118_link/cercopithifilaria_johnstoni/SEQ_STATS
+
+# assembly stats - note, this uses the genome fastas that were downloaded above for the BUSCO analyses
+assembly-stats -t *fa | cut -f 1,2,3,9,10
+
+```
+
+
+
+## ENA submission
+### Preparation of FASTQ reads for ENA submission
+- need to convert from FASTQ to CRAM format
+
+```bash
+
+bsub.py 10 FASTQ2CRAM_1 "java -Xmx20g -jar /nfs/users/nfs_s/sd21/lustre118_link/software/picard-tools-2.5.0/picard.jar FastqToSam \
+FASTQ=Cj3-500-700_S1_L001_R2_001.fastq.gz \
+FASTQ2=Cj3-500-700_S1_L001_R1_001.fastq.gz \
+OUTPUT=Cj3-500-700.unaligned.bam \
+READ_GROUP_NAME=Cj3-500-700 \
+SAMPLE_NAME=Cj3-500-700"
+
+bsub.py 10 FASTQ2CRAM_1 "samtools view -C -o Cj3-500-700.unaligned.cram Cj3-500-700.unaligned.bam"
+
+```
+
+
+
+### Prepartion of genome and annotation for ENA submission
+
+```bash
+# convert GFF to EMBL format.
+# using tool "EMBLmyGFF3" from https://github.com/NBISweden/EMBLmyGFF3
+# note the locus tag needed to be preregistered with ENA, which I did via DNA Resease at Sanger.
+
+EMBLmyGFF3 \
+cercopithifilaria_johnstoni_annotation_SD210906.gff3 \
+cercopithifilaria_johnstoni_genome_SD210906.fasta \
+--data_class STD \
+--accession \
+--topology linear \
+--molecule_type "genomic DNA" \
+--transl_table 1  \
+--species 'Cercopithifilaria johnstoni' \
+--taxonomy INV \
+--locus_tag CJOHNSTONI \
+--project_id PRJEB47283 \
+--author 'Stephen R. Doyle' \
+-o cercopithifilaria_johnstoni_genome_SD210906.embl
+
+# fix lineage - wasnt automatically picked by by tool due to the fact that C.johnstoni is a new species and taxon ID not searchable at the time of submission.
+cat  cercopithifilaria_johnstoni_genome_SD210906.embl | sed 's/^OC.*/OC   Eukaryota\; Metazoa\; Ecdysozoa\; Nematoda\; Chromadorea\; Rhabditida;\nOC   Spirurina\; Spiruromorpha\; Filarioidea\; Onchocercidae\; Cercopithifilaria./g' | sed 's/transl_table=5/transl_table=1/g' > tmp; mv tmp cercopithifilaria_johnstoni_genome_SD210906.embl
+
+
+gzip cercopithifilaria_johnstoni_genome_SD210906.embl
+
+```
+- sent this embl file to Pathogen Informatics for upload to ENA.
+
+
+
+## Wolbachia analyses
+- want to check to see if there is evidence of Wolbachia or similar, an endosymbiont commonly associated with filarial nematodes
+- a key reason for this is the the immunopathology of Onchocerca volvulus infection is thought to be driven by Wolbachia, and ivne the similar immunopathology caused by C. johnstoni in rats, identifying the presence or absence of Wolbachia may provide evidence for or against this hypothesis
+
+
+``` bash
+# working dir
+cd /nfs/users/nfs_s/sd21/lustre118_link/cercopithifilaria_johnstoni/WOLBACHIA
+
+# make some links to Cj genome and annotation in working dir
+ln -s /nfs/users/nfs_s/sd21/lustre118_link/cercopithifilaria_johnstoni/FINAL_GENOME/cercopithifilaria_johnstoni_genome_SD210906.fasta
+ln -s /nfs/users/nfs_s/sd21/lustre118_link/cercopithifilaria_johnstoni/FINAL_GENOME/cercopithifilaria_johnstoni_genome_SD210906.gff3
+
+# extract proteins from Cj annotation
+gffread cercopithifilaria_johnstoni_annotation_SD210906.gff3 -g cercopithifilaria_johnstoni_genome_SD210906.fasta -y CJ_proteins.fasta
+
+
+#
+# Wolbachia genomes used as per: doi: 10.1099/mgen.0.000487
+# wBm.fasta
+# wBp.fasta
+# wCauA.fasta
+# wCfeJ.fasta
+# wCfeT.fasta
+# wCle.fasta
+# wCtub.fasta
+# wDcau.fasta
+# wDimm.fasta
+# wFol.fasta
+# wLsig.fasta
+# wMel.fasta
+# wOo.fasta
+# wOv.fasta
+# wPip.fasta
+# wTpre.fasta
+
+# Downloaded from NCBI
+
+cat *fasta > wb_genomes.fasta
+
+```
+
+
+### Kraken on raw reads
+- kraken is a useful tool for analysing contamination in raw read data
+- Wolbachia and related species are in the kraken database, so this is a way, independent of the assembly, to check for the presence of Wolbachia
+
+```bash
+# get the raw reads
+ln -s Cj3-500-700_S1_L001_R1_001.fastq.gz
+ln -s Cj3-500-700_S1_L001_R2_001.fastq.gz
+
+# load kraken2
+module load kraken2/2.0.8_beta=pl526h6bb024c_0-c1
+
+# run kraken on the modern PE trimmed reads
+bsub.py 10 kraken "kraken2 \
+     --db /lustre/scratch118/infgen/pathogen/pathpipe/kraken2/silva_ssu_nr99_release_132 \
+     --report cj_rawreads.kraken2report \
+     --paired Cj3-500-700_S1_L001_R1_001.fastq.gz Cj3-500-700_S1_L001_R2_001.fastq.gz"
+
+```
+
+- outcome suggests vast majority of reads (98.55%) are unclassified (ie, not in the database), and therefore, likely worm
+     - 98.55	24021348	24021348	U	0	unclassified
+
+-  only a very small amount bacterial in total - I would expect "some" bacterial contamination anyway
+     - 0.38	92448	2905	D	3	  Bacteria
+
+- Only a fraction of those bacterial hits are classified as wolbachia or wolbachia like. I think this is pretty conclusive that there is no wolbachia present
+
+|     0.03	| 6560	| 104	| C	| 2379 |	      Alphaproteobacteria
+|     0.02	| 3683	| 0	| O	| 2761 |	        Rickettsiales
+|     0.01	| 3339	| 3339	| F	| 2805 | 	          Mitochondria
+|     0.00	| 172	| 0	| F	| 2763 | 	          Anaplasmataceae
+|     0.00	| 168	| 168	| G	| 2771 | 	            uncultured
+|     0.00	| 2	| 2	| G	| 2764 | 	            Anaplasma
+|     0.00	| 1	| 1	| G	| 2768 | 	            Ehrlichia
+|     0.00	| 1	| 1	| G	| 2770 | 	            Wolbachia
+|     0.00	| 75	| 75	| F	| 2796 | 	          S25-593
+|     0.00	| 75	| 0	| F	| 26213 | 	          Midichloriaceae
+|     0.00	| 74	| 74	| G	| 26222 | 	            MD3-55
+|     0.00	| 1	| 1	| G	| 26220 | 	            Candidatus Midichloria
+|     0.00	| 13	| 13	| F	| 2801 | 	          SM2D12
+|     0.00	| 6	| 0	| F	| 2781 | 	          Rickettsiaceae
+|     0.00	| 3	| 3	| G	| 2782 | 	            Candidatus Cryptoprodotis
+|     0.00	| 1	| 1	| G	| 2783 | 	            Orientia
+|     0.00	| 1	| 1	| G	| 2785 | 	            uncultured
+|     0.00	| 1	| 1	| G	| 26224 | 	            Ac37b
+|     0.00	| 2	| 2	| F	| 2806 | 	          uncultured
+|     0.00	| 1	| 1	| F	| 26212 | 	          AB1
+
+
+
+### Mapping Cj proteins to Wolbachia genome collection using exonerate
+- useful way to map protein sequences onto genomes
+
+```bash
+# run exonerate
+~sd21/bash_scripts/run_exonerate_splitter GENOMES/wb_genomes.fasta CJ_proteins.fasta
+
+# combine output of exonerate, and convert to GFF format
+cat split_exonerate*out | Exonerate_to_evm_gff3.pl - > merged_exonerate.output
+
+# clean up unnecessary files
+rm split_exonerate*out
+rm x*
+rm run_split*
+
+# extract gene IDs of Cj proteins that hit the wolbachia genomes
+cut -f9 merged_exonerate.output | cut -f3 -d "=" | sort | uniq | wc -l
+> 18 proteins in total.
+
+# extract the hit sequennces to a new file
+cut -f9 merged_exonerate.output | cut -f3 -d "=" | sort | uniq | while read -r name; do samtools faidx CJ_proteins.fasta ${name} >> Cj_wb_candidates.fa ; done
+
+# used NCBI web blastp to query the sequences - results are below
+
+```
+
+- where "~sd21/bash_scripts/run_exonerate_splitter" is:
+
+```bash
+#!/usr/bin/env bash
+# exonerate splitter
+
+reference=$1
+query=$2
+sequences_per_chunk=10
+
+length=$((${sequences_per_chunk} * 2))
+
+fastaq to_fasta -l 0 ${reference} ref.fa
+fastaq to_fasta -l 0 ${query} query.fa
+
+split -da 4 -l ${length} query.fa
+
+n=0
+for i in ` ls -1 x???? ` ; do
+let "n+=1"
+echo -e "exonerate --model protein2genome --percent 50 ${i} ref.fa --showtargetgff > split_exonerate_${n}_${i}.out" > run_split_exonerate_${n}; done
+
+chmod a+x run_split_exonerate_*
+bsub -q normal -n1 -R'span[hosts=1] select[mem>2500] rusage[mem=2500]' -M2500 -J "split_exonerate[1-$n]" -e split_exonerate[1-$n].e -o split_exonerate[1-$n].o ./run_split_
+exonerate_\$LSB_JOBINDEX
+bsub -q normal -n1 -R'span[hosts=1] select[mem>100] rusage[mem=100]' -M100 -w split_exonerate -J "split_exonerate_FIN" "touch FINISHED"
+
+```
+
+- 18 proteins in total
+     - 2 bacterial like - seem enriched in bacterial species rather than nematode species
+     - 16 are most components of the mitochondria, and perhaps would be expected to
+          - these were found in many nematodes, including filarial and non-filaria, whcih would suggest not related to Wb
+
+- list with blast annotation - wasnt necessaily the top hit, but highest hit with a description
+     - CJOH_00012460.t1 - Select seq ref|XP_042937157.1|	NADH-ubiquinone oxidoreductase 49 kDa subunit, mitochondrial, putative
+     - CJOH_00019630.t1 - Select seq ref|XP_001894995.1|	succinate dehydrogenase [ubiquinone] iron-sulfur protein, mitochondrial, putative [Bru
+     - CJOH_00021270.t1 - BMA-ATP-2 [Brugia malayi]
+     - CJOH_00023800.t1 - possible candidate, all bacterial hits - Select seq ref|WP_160413856.1|	YadA-like family protein
+     - CJOH_00024270.t1 - NADH-quinone oxidoreductase, B subunit [Onchocerca flexuosa]
+     - CJOH_00025330.t1 - fumarate hydratase [Loa loa]
+     - CJOH_00036320.t1 - enolase [Loa loa]
+     - CJOH_00041270.t1 - Select seq gb|OZC07229.1|	putative pyruvate dehydrogenase E1 component subunit beta [Onchocerca flexuosa]
+     - CJOH_00042930.t1 - Select seq ref|XP_001894295.1|	NADH-ubiquinone oxidoreductase 51 kDa subunit, mitochondrial precursor, putative [
+     - CJOH_00046080.t1 - Clp protease [Loa loa]
+     - CJOH_00047910.t1 - Select seq ref|XP_020303419.1|	NFS1 protein [Loa loa]
+     - CJOH_00065980.t1 - Select seq ref|XP_001894923.1|	succinate dehydrogenase [ubiquinone] flavoprotein subunit, mitochondrial, putative [
+     - CJOH_00065990.t1 - Select seq ref|XP_001894922.1|	succinate dehydrogenase [ubiquinone] flavoprotein subunit, mitochondrial, putative [B
+     - CJOH_00072200.t1 - ATP synthase F1 [Wuchereria bancrofti]
+     - CJOH_00083160.t1 - possible candidate prophage tail fiber N-terminal domain-containing protein [Escherichia coli] / collagen like protein.
+     - CJOH_00083890.t1 - Select seq ref|XP_020307530.1|	chaperone DnaK [Loa loa]
+     - CJOH_00095100.t1 - Select seq gb|OZC10981.1|	FeS cluster assembly scaffold IscU [Onchocerca flexuosa]
+     - CJOH_00103440.t1 - Select seq ref|XP_003139042.1|	NADH-ubiquinone oxidoreductase 23 kDa subunit [Loa loa]
+
+
+
+
+### Promer of Cj genome against Wb genomes
+- finally, want to quantify the sequence similarities between Cj and Wb genomes
+
+```bash
+# run promer on the genome against Wb genomes.
+bsub.py 10 promer "promer --maxmatch GENOMES/wb_genomes.fasta cercopithifilaria_johnstoni_genome_SD210906.v2.fasta"
+
+# extract the coordinates
+show-coords -THl out.delta > out.coords
+
+# sort hits by wolbachia ID, and the calulate thte total length of those hits and mean ID per Wb genome
+sort -k14 out.coords | datamash groupby 14 sum 5 mean 7
+
+```
+
+- output , after adding genome ID and genome length, and then calculating proportion of genome in excel  
+
+| Genome | Total_length_hits	| Mean_percentage_similarity	| genome_size	| proportion_genome_hit |
+| --- | --- | --- | --- | --- |
+| CP041215.1	| 16116	| 66.64302632	| 1449344	| 1.111951338 |
+| CP046577.1	| 15879	| 64.49867647	| 1045802	| 1.518356247 |
+| CP046578.1	| 14952	| 65.58705882	| 920122	| 1.625001902 |
+| CP046579.1	| 11481	| 66.31	| 863988	| 1.328837901 |
+| CP046580.1	| 12909	| 65.65070175	| 863427	| 1.495088757 |
+| NC_002978.6	| 15591	| 66.53785714	| 1267782	| 1.229785563 |
+| NC_006833.1	| 15390	| 64.63731343	| 1080084	| 1.424889175 |
+| NC_010981.1	| 16851	| 65.3215	| 1482455	| 1.136695549 |
+| NC_018267.1	| 14892	| 64.732	| 957990	| 1.554504744 |
+| NZ_AP013028.1	| 19878	| 64.04184783	| 1250060	| 1.590163672 |
+| NZ_CM003641.1	| 16542	| 63.55328767	| 1133809	| 1.458975895 |
+| NZ_CP015510.2	| 21981	| 63.07037383	| 1801626	| 1.220064542 |
+| NZ_CP050521.1	| 15036	| 64.69727273	| 1072967	| 1.401347851 |
+| NZ_CP051156.1	| 14220	| 67.58044776	| 1495538	| 0.950828398 |
+| NZ_CP051157.1	| 18507	| 63.25634146	| 1201647	| 1.540136163 |
+| NZ_HG810405.1	| 14838	| 64.72314286	| 960618	| 1.544630644 |
+| mean	| 15941.4375	| 65.052553	| 1177953.688	| 1.383203646 |
+
+
+- suggests that only 1.38% of Wb genomes shared with Cj genome.
+- given I found some genes, mostly mitochodnrial in origin, shared, I would say this demonstrates that
+- So, no Wolbachia present.
+
+
+
+
+
+
+
+## Other analyses (not in paper)
+- these were used either for Kirsty's thesis or just exploring the data, however, they are not described in the paper
+- just keeping it here for future reference
+
+### Repeat model and mask of filarial genomes
+
+```bash
 cd /nfs/users/nfs_s/sd21/lustre118_link/kirsty
+
 ```
-### get genomes from WBP
-```
+
+- get genomes from WBP
+
+```bash
 mkdir genomes
 cd genomes
 
@@ -221,138 +706,129 @@ for i in *.gz; do gunzip ${i}; done
 #--- kirsty sent C.johnstoni via WeTransfer - scp'ed into this dir and called it "CJ.fa"
 
 cd ..
+
 ```
 
 
-### make databases
-```
+- make databases
+
+```bash
 for i in $( cd genomes/ ; ls -1 | sed 's/.fa//g' ); do \
 mkdir ${i}_RM_OUT ; cd ${i}_RM_OUT ; bsub.py 1 01_RM_builddb "/nfs/users/nfs_s/sd21/lustre118_link/software/REPEATMASKER/RepeatModeler-open-1.0.11/BuildDatabase -name ${i} ../genomes/${i}.fa"  ; cd .. ;
 done
+
 ```
 
 
-### run modeller
-```
+- run modeller
+
+```bash
 for i in $( cd genomes/ ; ls -1 | sed 's/.fa//g' ); do \
-cd ${i}_RM_OUT ; bsub.py --threads 20 10 02_RM_model  "/nfs/users/nfs_s/sd21/lustre118_link/software/REPEATMASKER/RepeatModeler-open-1.0.11/RepeatModeler -pa 20 -engine ncbi -database ${i}"; cd .. ;
+     cd ${i}_RM_OUT ; bsub.py --threads 20 10 02_RM_model  "/nfs/users/nfs_s/sd21/lustre118_link/software/REPEATMASKER/RepeatModeler-open-1.0.11/RepeatModeler -pa 20 -engine ncbi -database ${i}"; cd .. ;
 done
+
 ```
 
 
-### run masker
-```
+- run masker
+
+```bash
 for i in $( cd genomes/ ; ls -1 | sed 's/.fa//g' ); do \
-cd ${i}_RM_OUT ; bsub.py --threads 7 10 03_RM_mask  "/nfs/users/nfs_s/sd21/lustre118_link/software/REPEATMASKER/RepeatMasker/RepeatMasker -e ncbi -pa 7 -s -dir ./ -small -gff -lib RM_*/consensi.fa.classified ../genomes/${i}.fa"; cd .. ;
+     cd ${i}_RM_OUT ; bsub.py --threads 7 10 03_RM_mask  "/nfs/users/nfs_s/sd21/lustre118_link/software/REPEATMASKER/RepeatMasker/RepeatMasker -e ncbi -pa 7 -s -dir ./ -small -gff -lib RM_*/consensi.fa.classified ../genomes/${i}.fa"; cd .. ;
 done
+
 ```
 
-### collate output
-```
+- collate output
+
+```bash
 > summary.data
 for i in $( cd genomes/ ; ls -1 | sed 's/.fa//g' ); do \
-echo ${i} >> summary.data;
-cat ${i}_RM_OUT/${i}.fa.tbl | grep -e ^"base" -e ^"SINE" -e ^"LINE" -e ^"LTR" -e ^"DNA" -e ^"Unclassified" -e ^"Total" -e ^"Simple" -e ^"Low" -e ^"Small" -e ^"Satellites" >> summary.data;
+     echo ${i} >> summary.data;
+     cat ${i}_RM_OUT/${i}.fa.tbl | grep -e ^"base" -e ^"SINE" -e ^"LINE" -e ^"LTR" -e ^"DNA" -e ^"Unclassified" -e ^"Total" -e ^"Simple" -e ^"Low" -e ^"Small" -e ^"Satellites" >> summary.data;
 done
-```
-
-
-<<<<<<< HEAD
-module load tetools/1.1-c3
-
-BuildDatabase -name CJ cjohnstoni_genome_200917.fasta
-
-RepeatModeler -pa 20 -engine ncbi -database CJ
-
-RepeatMasker -e ncbi -pa 7 -s -dir ./ -small -gff -lib RM_11168.FriSep250900502020/consensi.fa.classified cjohnstoni_genome_200917.fasta
-=======
-#---------------------------------------------------------------------------------------------------------------------
-
-
-
-# Assembly statistics for filarial nematodes + C. johnstoni
-```
-cd miniconda3/bin/
-
-#---New C. johnstoni genome assembly used
-#---nematode genome versions recorded
-
-assembly-stats /home/kirstmac/Documents/Files/cercopithifilaria_johnstoni-master/02_data/cjohnstoni_genome_200917.fasta
-assembly-stats /home/kirstmac/Documents/whole-genomes/acanthocheilonema_viteae.PRJEB1697.WBPS13.genomic.fa
-assembly-stats /home/kirstmac/Documents/whole-genomes/brugia_malayi.PRJNA10729.WBPS13.genomic.fa
-assembly-stats /home/kirstmac/Documents/whole-genomes/brugia_pahangi.PRJEB497.WBPS13.genomic.fa
-assembly-stats /home/kirstmac/Documents/whole-genomes/brugia_timori.PRJEB4663.WBPS13.genomic.fa
-assembly-stats /home/kirstmac/Documents/whole-genomes/dirofilaria_immitis.PRJEB1797.WBPS13.genomic.fa
-assembly-stats /home/kirstmac/Documents/whole-genomes/litomosoides_sigmodontis.PRJEB3075.WBPS13.genomic.fa
-assembly-stats /home/kirstmac/Documents/whole-genomes/loa_loa.PRJNA246086.WBPS13.genomic.fa
-assembly-stats /home/kirstmac/Documents/whole-genomes/onchocerca_flexuosa.PRJEB512.WBPS13.genomic.fa
-assembly-stats /home/kirstmac/Documents/whole-genomes/onchocerca_ochengi.PRJEB1204.WBPS13.genomic.fa
-assembly-stats /home/kirstmac/Documents/whole-genomes/onchocerca_volvulus.PRJEB513.WBPS14.genomic.fa
-assembly-stats /home/kirstmac/Documents/whole-genomes/wuchereria_bancrofti.PRJEB536.WBPS13.genomic.fa
 
 ```
 
 
-#---------------------------------------------------------------------------------------------------------------------
+### Comparison of genome assemblies - scaffold length vs cumulative genome size
+-
 
-# Filarial nematode BUSCO analyses whole genomes
+```bash
 
-```
-cd /Documents/Programs/busco-master
+module load seqtk/1.3--ha92aebf_0
 
-python scripts/run_BUSCO.py -i /home/kirstmac/Documents/whole-genomes/brugia_pahangi.PRJEB497.WBPS13.genomic.fa -o B_pahangi_Busco -l nematoda_odb9/ -m geno
-python scripts/run_BUSCO.py -i /home/kirstmac/Documents/whole-genomes/brugia_timori.PRJEB4663.WBPS13.genomic.fa -o B_timori_Busco -l nematoda_odb9/ -m geno
-python scripts/run_BUSCO.py -i /home/kirstmac/Documents/whole-genomes/acanthocheilonema_viteae.PRJEB1697.WBPS13.genomic.fa -o A_viteae_BUSCO -l nematoda_odb9/ -m geno
-python scripts/run_BUSCO.py -i /home/kirstmac/Documents/whole-genomes/brugia_malayi.PRJNA10729.WBPS13.genomic.fa -o B_malayi_BUSCO -l nematoda_odb9/ -m geno
-python scripts/run_BUSCO.py -i /home/kirstmac/Documents/whole-genomes/dirofilaria_immitis.PRJEB1797.WBPS13.genomic.fa -o D_immitis_BUSCO -l nematoda_odb9/ -m geno
-python scripts/run_BUSCO.py -i /home/kirstmac/Documents/whole-genomes/litomosoides_sigmodontis.PRJEB3075.WBPS13.genomic.fa -o L_sigmodontis_BUSCO -l nematoda_odb9/ -m geno
-python scripts/run_BUSCO.py -i /home/kirstmac/Documents/whole-genomes/loa_loa.PRJNA246086.WBPS13.genomic.fa -o L_loa_BUSCO -l nematoda_odb9/ -m geno
-python scripts/run_BUSCO.py -i /home/kirstmac/Documents/whole-genomes/onchocerca_flexuosa.PRJEB512.WBPS13.genomic.fa -o O_flexuosa_BUSCO -l nematoda_odb9/ -m geno
-python scripts/run_BUSCO.py -i /home/kirstmac/Documents/whole-genomes/onchocerca_ochengi.PRJEB1204.WBPS13.genomic.fa -o O_ochengi_BUSCO -l nematoda_odb9/ -m geno
-python scripts/run_BUSCO.py -i /home/kirstmac/Documents/whole-genomes/onchocerca_volvulus.PRJEB513.WBPS14.genomic.fa -o O_volvulus_BUSCO -l nematoda_odb9/ -m geno
-python scripts/run_BUSCO.py -i /home/kirstmac/Documents/whole-genomes/wuchereria_bancrofti.PRJEB536.WBPS13.genomic.fa -o W_bancrofti_BUSCO -l nematoda_odb9/ -m geno
+cd /nfs/users/nfs_s/sd21/lustre118_link/cercopithifilaria_johnstoni/SEQ_STATS
 
+# download filarial genomes from wormbase parasite
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS15/species/acanthocheilonema_viteae/PRJEB1697/acanthocheilonema_viteae.PRJEB1697.WBPS15.genomic.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS15/species/brugia_malayi/PRJNA10729/brugia_malayi.PRJNA10729.WBPS15.genomic.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS15/species/brugia_pahangi/PRJEB497/brugia_pahangi.PRJEB497.WBPS15.genomic.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS15/species/brugia_timori/PRJEB4663/brugia_timori.PRJEB4663.WBPS15.genomic.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS15/species/dirofilaria_immitis/PRJEB1797/dirofilaria_immitis.PRJEB1797.WBPS15.genomic.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS15/species/loa_loa/PRJNA246086/loa_loa.PRJNA246086.WBPS15.genomic.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS15/species/litomosoides_sigmodontis/PRJEB3075/litomosoides_sigmodontis.PRJEB3075.WBPS15.genomic.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS15/species/onchocerca_volvulus/PRJEB513/onchocerca_volvulus.PRJEB513.WBPS15.genomic.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS15/species/onchocerca_ochengi/PRJEB1204/onchocerca_ochengi.PRJEB1204.WBPS15.genomic.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS15/species/onchocerca_flexuosa/PRJEB512/onchocerca_flexuosa.PRJEB512.WBPS15.genomic.fa.gz
+wget ftp://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS15/species/wuchereria_bancrofti/PRJEB536/wuchereria_bancrofti.PRJEB536.WBPS15.genomic.fa.gz
 
-#---just noticed I have used a different version of Wb, Ls and Of genomes for all my analyses than what you have Steve. Will amend these and adjust notes when I have.
+gunzip *
 
-```
+# extract scaffold lengths and total sequecne length for plotting
+>data.seqtk_out
+for i in *.fa; do
+     seqtk comp ${i} | sort -k2,2nr | awk -v NAME=${i%.WBPS15.genomic.fa} '{print $1,$2,NAME}' OFS="\t" > ${i}.seqtk_out;
+     done
 
+for i in *.seqtk_out; do
+     SUM=$(cat ${i} | datamash sum 2 );
+     awk -v SUM=${SUM} '{print $1,$2,$3,SUM,$2/SUM}' OFS="\t" ${i} > ${i}.seqtk_out2;
+     done
 
-#---------------------------------------------------------------------------------------------------------------------
-
-
-
-# BUSCO for new CJ proteome and filarial nematode proteomes
-```
-
-cd /Documents/Programs/busco-master
-
-#---using the new CJ genome annotation that was trained using BUSCO
-
-python scripts/run_BUSCO.py -i /home/kirstmac/Documents/Files/cercopithifilaria_johnstoni-master/200920_CJ_BUSCO.fa -o CJ_BUSCOtrained-assembly -l nematoda_odb9/ -m prot
-
-#---then running the same analysis on the remaining filarial nematodes to compare CJ against
-#---note that all the nematode protein files are from the same genome versions used from assembly statistics and all other analyses
-
-python scripts/run_BUSCO.py -i /home/kirstmac/Documents/Files/Proteins/A_viteae.fa -o Av-proteins -l nematoda_odb9/ -m prot
-python scripts/run_BUSCO.py -i /home/kirstmac/Documents/Files/Proteins/B_malayi.fa -o Bm-proteins -l nematoda_odb9/ -m prot
-python scripts/run_BUSCO.py -i /home/kirstmac/Documents/Files/Proteins/B_pahangi.fa -o Bp-proteins -l nematoda_odb9/ -m prot
-python scripts/run_BUSCO.py -i /home/kirstmac/Documents/Files/Proteins/B_timori.fa -o Bt-proteins -l nematoda_odb9/ -m prot
-python scripts/run_BUSCO.py -i /home/kirstmac/Documents/Files/Proteins/D_immitis.fa -o Di-proteins -l nematoda_odb9/ -m prot
-python scripts/run_BUSCO.py -i /home/kirstmac/Documents/Files/Proteins/L_loa.fa -o Ll-proteins -l nematoda_odb9/ -m prot
-python scripts/run_BUSCO.py -i /home/kirstmac/Documents/Files/Proteins/L_sigmodontis.fa -o Ls-proteins -l nematoda_odb9/ -m prot
-python scripts/run_BUSCO.py -i /home/kirstmac/Documents/Files/Proteins/O_flexuosa.fasta -o Of-proteins -l nematoda_odb9/ -m prot
-python scripts/run_BUSCO.py -i /home/kirstmac/Documents/Files/Proteins/O_ochengi.fasta -o Oc-proteins -l nematoda_odb9/ -m prot
-python scripts/run_BUSCO.py -i /home/kirstmac/Documents/Files/Proteins/O_volvulus.fasta -o Ov-proteins -l nematoda_odb9/ -m prot
-python scripts/run_BUSCO.py -i /home/kirstmac/Documents/Files/Proteins/W_bancrofti.fa -o Wb-proteins -l nematoda_odb9/ -m prot
+cat *.seqtk_out2 > data.seqtk_out
+rm *.seqtk_out2
 
 ```
+
+- make a plot
+
+```R
+
+library(tidyverse)
+
+data <- read.table("data.seqtk_out", sep="\t")
+data <- data %>% group_by(V3) %>% mutate(csum = cumsum(V5))
+
+ggplot(data, aes(csum, log10(V2), group=V3, colour = V3)) + geom_point()
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 #---------------------------------------------------------------------------------------------------------------------
 
 # 12S-COI phylogeny
-```
+
+```bash
 
 module load raxml-gcc/8.0.19
 
@@ -367,13 +843,10 @@ raxmlHPC -s 20-09-30_12S-COI_alignment_reducedoutgroups_gb.phy -n 20-09-30_12SCO
 ```
 
 
-<<<<<<< HEAD
->>>>>>> a1be7b7c631cea91cc58aa5a7243e8d913e35c4a
-=======
-#---------------------------------------------------------------------------------------------------------------------
 
-# Circos plot
-```
+## Circos plot
+
+```bash
 #---Running analysis on the linux system (ASUS) - the HPC not set up properly
 #---run PROMER
 
@@ -403,9 +876,11 @@ module load circos/0.67_5
 circos
 
 ```
+
 ![Chromosome Figure](../04_analysis/CJOV_circos_coloured-by-X.png)
 
-```
+```bash
+
 #---B_malayi and Cjohnstoni circos plot
 
 ./promer --mum --prefix CJv2_BM brugia_malayi.PRJNA10729.WBPS13.genomic.fa /home/kirstmac/Documents/Files/cercopithifilaria_johnstoni-master/02_data/cjohnstoni_genome_200917.fasta
@@ -431,6 +906,7 @@ module load circos/0.67_5
 circos
 
 ```
+
 ![Chromosome Figure](../04_analysis/CJBM_circos_coloured-by-X.png)
 
 
@@ -438,6 +914,7 @@ circos
 #---------------------------------------------------------------------------------------------------------------------
 
 # GC vs Coverage plot
+
 ```bash
 
 #---mapping reads to the updated CJ genome
@@ -497,9 +974,10 @@ samtools dict scaffolds.reduced.fa |\
 
 
 paste GCcontent_201007_new.txt coverage_new_201007.txt cj_ov_promer.complete.hits > NEW_GC_COV_201007.txt
-```
 
 ```
+
+```R
 #---R script
 #--GC coverage plot coloured by O. volvulus chromosomes
 
@@ -518,11 +996,13 @@ SS <- ggplot() + geom_point(data = A,
   labs(y = "Coverage (read depth)", x = "GC content (%)") +
   labs(color = "O_volvulus chromosomes")
 
+
 ```
+
 SS
 ![Chromosome Figure](../04_analysis/GCcov_plot_20-10-08.png)
 
-```
+```R
 #---plot generated with the log scale, log10
 
 LOG <- ggplot() + geom_point(data = A,
@@ -534,11 +1014,13 @@ LOG <- ggplot() + geom_point(data = A,
   labs(y = "Coverage log10 (read depth)", x = "GC content (%)") +
   labs(color = "O_volvulus chromosomes")
 
+
 ```
+
 LOG
 ![Chromosome Figure](../04_analysis/GCcov_plot_log10_201008.png)
 
-```
+```R
 #---seperate chromosome plots
 
 CHROM <- ggplot() + geom_point(data = A,
@@ -552,11 +1034,12 @@ CHROM <- ggplot() + geom_point(data = A,
   labs(color = "O_volvulus chromosomes")
 
 ```
+
 CHROM
 ![Chromosome Figure](../04_analysis/seperate_plot_chrom_20-10-08.png)
 
 
-```
+```R
 #---GC coverage plot coloured by B. malayi
 
 B <- read.csv(file="D://PhDanalyses2//C_johnstoni_analyses//whole_genome//20-10-14_GCcov_BM_circos//NEW_GC_COV_201014_BMchromdata_2.csv")
@@ -572,10 +1055,9 @@ CHROM <- ggplot() + geom_point(data = B,
   labs(color = "B_malayi chromosomes")
 
 ```
+
 CHROM
 ![Chromosome Figure](../04_analysis/GCcov_plot_CJBM_20-10-14.png)
-
-```
 
 
 
@@ -602,9 +1084,6 @@ ggmap(map) +
   )
 
   us <- c(left = -125, bottom = 25.75, right = -67, top = 49)
-  get_stamenmap(us, zoom = 10, maptype = "terrain") %>% ggmap() 
+  get_stamenmap(us, zoom = 10, maptype = "terrain") %>% ggmap()
 
 ```
-
-
->>>>>>> 735b9d98f7a410ccdc01beb98266c3b57d140062

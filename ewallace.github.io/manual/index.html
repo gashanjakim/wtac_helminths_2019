@@ -1,0 +1,85 @@
+---
+layout: default
+title: "Manual"
+description: "Lab manual"
+group: navigation
+navorder: 5
+---
+{% include JB/setup %}
+
+<div class="pager">
+  
+	{% if paginator.previous_page %}
+		{% if paginator.previous_page == 1 %}
+		<a class="prev" href="/{{ page.category }}/">
+			<i class="fa fa-chevron-left fa-lg"></i>
+		</a>
+		{% else %}
+		<a class="prev" href="/{{ page.category }}/page{{ paginator.previous_page }}">
+			<i class="fa fa-chevron-left fa-lg"></i>
+		</a>
+		{% endif %}  		
+	{% endif %}  
+  
+	{% if paginator.next_page %}  
+	<a class="next" href="/{{ page.category }}/page{{ paginator.next_page }}">
+		<i class="fa fa-chevron-right fa-lg"></i>
+	</a>	
+	{% endif %}  	
+    
+</div>
+
+<h2> Lab manual </h2>
+
+<p> Here is our lab manual: the essential points to know about working in the Wallace lab. </p>
+
+This is a living document that is now (March 2021) and forever under construction.
+
+If there's anything missing, inaccurate, outdated, outrageous, or unhelpful, please 
+<a href="https://github.com/ewallace/ewallace.github.io/issues"> file an issue on the github page </a>,
+edit the file yourself and put in a pull request, 
+and/or talk to Edward.
+
+<hr>
+
+{% for manualentry in site.categories.manual %}
+	
+		<div class="bigspacer"></div>
+		<div class="row">
+			<div class="col-md-12">
+				<div class="smallhead">
+					<a href="{{ manualentry.url }}" class="off">{{ manualentry.title }}</a>
+				</div>
+				<div class="smallnote">
+					{%comment%}{{ manualentry.date | date_to_string }}{% endcomment %}
+					{% if author %}
+					by <a class="off" href="{{ author.url }}">{{ author.handle }}</a>
+					{% endif %}				
+				</div>
+				<div class="subtle smallnote">
+					tags:
+					{% for tag in manualentry.tags %}
+						{{ tag }}{% if tag != manualentry.tags.last %},{% endif %}
+					{% endfor %}
+				</div>
+
+			</div>
+		</div>		
+
+{% endfor %}
+
+{% comment %}
+
+<div class="bigspacer"></div>	
+<div class="row">
+	<div class="col-md-12 text-center">
+		<a class="off" href="/{{ page.category }}/archive/">
+			<div class="smallhead">Archive</div>
+			<i class="text-gray fa fa-chevron-circle-down fa-2x"></i>
+		</a>
+	</div>
+</div>
+{% endcomment %}
+
+
+<div class="bigspacer"></div>
